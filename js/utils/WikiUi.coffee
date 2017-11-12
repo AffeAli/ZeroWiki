@@ -102,14 +102,61 @@ class WikiUi
     @contentHistory.style.display = "block"
     history_list = document.getElementById("history_list")
     body = ""
+    i = 0
     for message in messages
       parsedDate = Time.since(message.date_added / 1000)
       body += "<li>Edited by #{message.cert_user_id} <span class=\"muted\">#{parsedDate}</span>"
+      if i + 1 < messages.length
+        body += "<a href=\"?Page:#{message.slug}&Rev:#{message.id}&Diff:#{messages[i + 1].id}\" class=\"pure-button button-success\" style=\"margin-left:10px;\">View Diff</a>"
       body += "<a href=\"?Page:#{message.slug}&Rev:#{message.id}\" class=\"pure-button button-success\">"
       body += "View</a></li>"
+      i++
     history_list = document.getElementById("history_list")
     history_list.innerHTML = body
 
+  #
+  # Show the diff between versions.
+  #
+
+  showPageDiff: (from, to) ->
+    query = "SELECT * FROM pages WHERE id = \"#{to}\""
+    window.Page.cmd "dbQuery", [query], (pages) =>
+      query = "SELECT * FROM pages, keyvalue LEFT JOIN json using (json_id) WHERE id = \"#{from}\""
+      window.Page.cmd "dbQuery", [query], (pages2) =>
+        base = difflib.stringAsLines(pages[0].body) # Generate diff
+        newtxt = difflib.stringAsLines(pages2[0].body)
+        sm = new difflib.SequenceMatcher(base, newtxt)
+
+        diffoutputdiv = document.getElementById("messages")
+        diffoutputdiv.innerHTML = ""
+        diffoutputdiv.appendChild(diffview.buildView({ # Show diff
+        baseTextLines: base,
+        newTextLines: newtxt,
+        opcodes: sm.get_opcodes(),
+        baseTextName: from,
+        newTextName: to,
+        contextSize: 4,
+        viewType: 0
+        }));
+        # Add additional informations
+        query = """
+          SELECT pages.*, keyvalue.value AS cert_user_id FROM pages
+                LEFT JOIN json AS data_json USING (json_id)
+                LEFT JOIN json AS content_json ON (
+                    data_json.directory = content_json.directory AND content_json.file_name = 'content.json'
+                )
+                LEFT JOIN keyvalue ON (keyvalue.key = 'cert_user_id' AND keyvalue.json_id = content_json.json_id)
+                WHERE pages.id = '#{from}'
+        """
+        window.Page.cmd "dbQuery", [query], (res) => 
+          fromHTML = "<a href=\"?Page:#{window.Page.getSlug()}&Rev:#{from}\">#{from}</a><br>by #{res[0].cert_user_id} (#{Time.since(res[0].date_added / 1000)})"
+          diffoutputdiv.firstChild.firstChild.getElementsByClassName("texttitle")[0].innerHTML = fromHTML
+        query = query.replace("#{from}", "#{to}")
+        window.Page.cmd "dbQuery", [query], (res) =>
+          toHTML = "<a href=\"?Page:#{window.Page.getSlug()}&Rev:#{to}\">#{to}</a><br>by #{res[0].cert_user_id} (#{Time.since(res[0].date_added / 1000)})"
+          diffoutputdiv.firstChild.firstChild.getElementsByClassName("texttitle")[1].innerHTML = toHTML
+        @showContent()
+      
   #
   # Load content into the dom. The editor loads the raw content from
   # the database and the content panel gets the HTML version.

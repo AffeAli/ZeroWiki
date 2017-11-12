@@ -209,6 +209,10 @@ class ZeroWiki extends ZeroFrame
       @showIndexPage()
       return true
 
+    if @isDiff(url)
+      WikiUi.showPageDiff(@getRevisionNumber(), @getDiffTo())
+      return true
+    
     if @isHistory(url)
       @pageHistory(@getSlug())
       return true
@@ -225,7 +229,17 @@ class ZeroWiki extends ZeroFrame
       return true
 
     return false
+  
+  #
+  # Check if current page is an diff page
+  #
 
+  isDiff: (url=null) ->
+    url = window.location.search.substring(1) unless url isnt null
+    if @getDiffTo(url)
+      return true
+
+    return false
 
   #
   # Return current page slug or an empty string
@@ -248,6 +262,18 @@ class ZeroWiki extends ZeroFrame
     url = window.location.search.substring(1) unless url isnt null
 
     if match = url.match /Rev:([a-z0-9\-]*)(&.*)?$/
+      return match[1]
+    else
+      return null
+
+  #
+  # Get the content target diff id from the url.
+  #
+
+  getDiffTo: (url=null) ->
+    url = window.location.search.substring(1) unless url isnt null
+
+    if match = url.match /Diff:([a-z0-9\-]*)(&.*)?$/
       return match[1]
     else
       return null
